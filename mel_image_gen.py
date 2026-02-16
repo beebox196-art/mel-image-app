@@ -19,13 +19,13 @@ st.set_page_config(
 
 st.title("🎨 Mel's Image Studio")
 st.write("Welcome! Type what you want to see below and click Generate.")
-st.caption("Powered by Google Gemini 2.0 Flash • Created by Bee for Mel")
+st.caption("Powered by Google Gemini 2.5 Flash Image • Created by Bee for Mel")
 
 # 3. Sidebar
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.info("Using Gemini 2.0 Flash (experimental). For production, we'll switch to Vertex AI with your $300 credit.")
+    st.info("Using Gemini 2.5 Flash Image. For production, we'll switch to Vertex AI with your $300 credit.")
     st.divider()
     st.markdown("### 💡 Tips")
     st.markdown("""
@@ -63,16 +63,11 @@ if generate_button:
                 # Configure the client
                 genai.configure(api_key=google_api_key)
                 
-                # Use Gemini 2.0 Flash for image generation
-                model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                # Use Gemini 2.5 Flash Image for image generation
+                model = genai.GenerativeModel('gemini-2.5-flash-image')
                 
                 # Generate the image
-                response = model.generate_content(
-                    prompt,
-                    generation_config={
-                        "response_modalities": ["TEXT", "IMAGE"],
-                    }
-                )
+                response = model.generate_content(prompt)
                 
                 # Process the response
                 if response.candidates and response.candidates[0].content.parts:
