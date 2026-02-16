@@ -7,33 +7,33 @@ import os
 
 # 1. Configuration & Secrets
 # ---------------------------
-# The API key is stored securely in Streamlit Cloud secrets
-google_api_key = st.secrets.get("GOOGLE_API_KEY", os.environ.get("GOOGLE_API_KEY", ""))
+# Using Gemini API (free tier) - switch to Vertex AI when hitting limits
+google_api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
 # 2. Page Setup
 # ---------------------------
 st.set_page_config(
-    page_title="Mel's Imagen Studio",
+    page_title="Mel's Image Studio",
     page_icon="🎨",
     layout="centered"
 )
 
-st.title("🎨 Mel's Imagen Studio")
+st.title("🎨 Mel's Image Studio")
 st.write("Welcome! Type what you want to see below and click Generate.")
-st.caption("Powered by Google Imagen • Created by Bee for Mel")
+st.caption("Powered by Google Gemini • Created by Bee for Mel")
 
 # 3. Sidebar
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.info("This app uses Adam's $300 Google Cloud credit for image generation.")
+    st.info("Using Gemini API (free tier). Will switch to Vertex AI with $300 credit if we hit limits.")
     st.divider()
     st.markdown("### 💡 Tips")
     st.markdown("""
     - Be specific with details
     - Include style (photo, painting, cartoon)
     - Add lighting (sunset, dramatic, soft)
-    - Mention mood (peaceful, energetic, mysterious)
+    - Mention mood (peaceful, energetic)
     """)
     st.divider()
     st.markdown("### 🐝 About")
@@ -44,7 +44,7 @@ with st.sidebar:
 prompt = st.text_area(
     "What should I create?",
     height=120,
-    placeholder="A serene landscape with a mountain lake at sunset, photorealistic style with warm golden lighting..."
+    placeholder="A serene landscape with a mountain lake at sunset, photorealistic style..."
 )
 
 col1, col2, col3 = st.columns([1, 2, 1])
@@ -57,17 +57,17 @@ if generate_button:
     if not prompt:
         st.warning("Please enter a prompt first!")
     elif not google_api_key:
-        st.error("No API key configured. Adam needs to add GOOGLE_API_KEY to Streamlit secrets.")
+        st.error("No API key configured. Add GEMINI_API_KEY to Streamlit secrets.")
     else:
-        with st.spinner("Creating your image... (this usually takes 10-20 seconds)"):
+        with st.spinner("Creating your image... (usually 10-20 seconds)"):
             try:
                 # Configure the client
                 genai.configure(api_key=google_api_key)
                 
-                # Use the Imagen model for image generation
-                # Note: imagen-3.0-generate-001 is the model name
-                model = genai.GenerativeModel('imagen-3.0-generate-001')
+                # Use Imagen 3 for image generation via Gemini API
+                model = genai.GenerativeModel('imagen-3.0-generate-002')
                 
+                # Generate the image
                 response = model.generate_content(
                     prompt,
                     generation_config={
@@ -102,7 +102,7 @@ if generate_button:
                             mime="image/png"
                         )
                         
-                        # Store in session for gallery (optional)
+                        # Store in session for gallery
                         if 'gallery' not in st.session_state:
                             st.session_state.gallery = []
                         st.session_state.gallery.append({
@@ -112,23 +112,28 @@ if generate_button:
                         
                     else:
                         st.error("The model didn't return an image. Try a different prompt.")
-                        st.json(response.candidates[0].content.parts)
                 else:
-                    st.error("Could not generate image. Response was empty.")
-                    st.write(response)
+                    st.error("Could not generate image. Try again.")
                     
             except Exception as e:
-                st.error(f"Something went wrong: {str(e)}")
-                with st.expander("🔍 Technical Details"):
-                    st.code(str(e))
+                error_msg = str(e)
+                st.error(f"Something went wrong: {error_msg}")
+                
+                # Helpful error messages
+                if "quota" in error_msg.lower() or "limit" in error_msg.lower():
+                    st.warning("⚠️ You've hit the free tier limit. Time to switch to Vertex AI with your $300 credit!")
+                elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
+                    st.warning("🔑 The API key might be wrong. Check the secrets configuration.")
+                elif "not supported" in error_msg.lower():
+                    st.warning("🔧 This model needs Vertex AI. Let Bee know to update the app.")
 
-# 6. Gallery (Optional - shows previous generations in this session)
+# 6. Gallery (shows previous generations in this session)
 # ---------------------------
 if 'gallery' in st.session_state and len(st.session_state.gallery) > 1:
     st.divider()
     st.header("🖼️ This Session's Gallery")
     
     cols = st.columns(3)
-    for idx, item in enumerate(st.session_state.gallery[:-1]):  # Exclude current
+    for idx, item in enumerate(st.session_state.gallery[:-1]):
         with cols[idx % 3]:
-            st.image(item['image'], caption=item['prompt'][:50] + "...", use_column_width=True)
+            st.image(item['image'], caption=item['prompt'][:40] + "...", use_column_width=True)
