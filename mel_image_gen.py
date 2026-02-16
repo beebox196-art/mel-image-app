@@ -69,53 +69,56 @@ if generate_button:
                 # Generate the image
                 response = model.generate_content(prompt)
                 
-                # Process the response
-                if response.candidates and response.candidates[0].content.parts:
-                    images = []
-                    text_response = ""
+                # Debug: show what we got
+                st.write("Debug - Response received")
+                
+                # Try to extract the image from response
+                image_found = False
+                
+                if hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    st.write(f"Debug - Candidate finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}")
                     
-                    for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            # This is an image
-                            img_data = base64.b64decode(part.inline_data.data)
-                            img = Image.open(io.BytesIO(img_data))
-                            images.append(img)
-                        elif hasattr(part, 'text') and part.text:
-                            text_response = part.text
-                    
-                    if images:
-                        # Display the first image
-                        st.success("Here's your creation!")
-                        st.image(images[0], caption=prompt, use_container_width=True)
-                        
-                        # Download button
-                        buffered = io.BytesIO()
-                        images[0].save(buffered, format="PNG")
-                        st.download_button(
-                            label="📥 Download Image",
-                            data=buffered.getvalue(),
-                            file_name=f"mel_creation_{prompt[:20].replace(' ', '_')}.png",
-                            mime="image/png"
-                        )
-                        
-                        # Store in session for gallery
-                        if 'gallery' not in st.session_state:
-                            st.session_state.gallery = []
-                        st.session_state.gallery.append({
-                            'prompt': prompt,
-                            'image': images[0]
-                        })
-                        
-                        # Show text response if any
-                        if text_response:
-                            st.info(f"📝 {text_response}")
-                    else:
-                        st.error("No image was generated. The model returned text only.")
-                        if text_response:
-                            st.write(text_response)
-                        
-                else:
-                    st.error("Could not generate image. Try again with a different prompt.")
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            st.write(f"Debug - Number of parts: {len(candidate.content.parts)}")
+                            
+                            for idx, part in enumerate(candidate.content.parts):
+                                st.write(f"Debug - Part {idx}: {type(part).__name__}")
+                                
+                                # Check for inline_data (image)
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    st.write(f"Debug - Found inline_data, mime_type: {part.inline_data.mime_type if hasattr(part.inline_data, 'mime_type') else 'unknown'}")
+                                    
+                                    try:
+                                        img_data = base64.b64decode(part.inline_data.data)
+                                        img = Image.open(io.BytesIO(img_data))
+                                        
+                                        st.success("Here's your creation!")
+                                        st.image(img, caption=prompt, use_container_width=True)
+                                        
+                                        # Download button
+                                        buffered = io.BytesIO()
+                                        img.save(buffered, format="PNG")
+                                        st.download_button(
+                                            label="📥 Download Image",
+                                            data=buffered.getvalue(),
+                                            file_name=f"mel_creation.png",
+                                            mime="image/png"
+                                        )
+                                        image_found = True
+                                        
+                                    except Exception as img_error:
+                                        st.error(f"Image decode error: {img_error}")
+                                
+                                # Check for text response
+                                elif hasattr(part, 'text') and part.text:
+                                    st.write(f"Debug - Text response: {part.text[:200]}")
+                
+                if not image_found:
+                    st.error("No image found in the response.")
+                    st.write("Full response debug:")
+                    st.json(str(response))
                     
             except Exception as e:
                 error_msg = str(e)
@@ -126,19 +129,6 @@ if generate_button:
                     st.warning("⚠️ You've hit the free tier limit. Time to switch to Vertex AI with your $300 credit!")
                 elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
                     st.warning("🔑 The API key might be wrong. Check the secrets configuration.")
-                elif "not found" in error_msg.lower() or "not supported" in error_msg.lower():
-                    st.warning("🔧 Model not available. Bee needs to update the app.")
                 else:
-                    with st.expander("🔍 Technical Details"):
+                    with st.expander("🔍 Full Technical Details"):
                         st.code(error_msg)
-
-# 6. Gallery (shows previous generations in this session)
-# ---------------------------
-if 'gallery' in st.session_state and len(st.session_state.gallery) > 1:
-    st.divider()
-    st.header("🖼️ This Session's Gallery")
-    
-    cols = st.columns(3)
-    for idx, item in enumerate(st.session_state.gallery[:-1]):
-        with cols[idx % 3]:
-            st.image(item['image'], caption=item['prompt'][:40] + "...", use_column_width=True)
