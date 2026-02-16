@@ -4,6 +4,7 @@ from PIL import Image
 import io
 import base64
 import os
+import tempfile
 
 # 1. Configuration & Secrets
 # ---------------------------
@@ -81,38 +82,36 @@ if generate_button:
                                 # Check for inline_data (image)
                                 if hasattr(part, 'inline_data') and part.inline_data:
                                     try:
-                                        # The data might be base64 string or bytes
                                         raw_data = part.inline_data.data
                                         
-                                        # Try to decode as base64 first
-                                        try:
-                                            img_data = base64.b64decode(raw_data)
-                                        except:
-                                            # If that fails, it might already be bytes
-                                            img_data = raw_data
+                                        # It's bytes, save to temp file and read
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                                            tmp.write(raw_data)
+                                            tmp_path = tmp.name
                                         
-                                        # Try to open the image
-                                        img = Image.open(io.BytesIO(img_data))
+                                        # Try to open with PIL
+                                        img = Image.open(tmp_path)
                                         
                                         st.success("Here's your creation!")
                                         st.image(img, caption=prompt, use_column_width=True)
                                         
-                                        # Download button
-                                        buffered = io.BytesIO()
-                                        img.save(buffered, format="PNG")
+                                        # Download button - use the raw bytes
                                         st.download_button(
                                             label="📥 Download Image",
-                                            data=buffered.getvalue(),
+                                            data=raw_data,
                                             file_name=f"mel_creation.png",
                                             mime="image/png"
                                         )
                                         image_found = True
                                         
+                                        # Cleanup
+                                        os.unlink(tmp_path)
+                                        
                                     except Exception as img_error:
                                         st.error(f"Image decode error: {img_error}")
-                                        # Show what we got for debugging
                                         st.write(f"Data type: {type(raw_data)}")
                                         st.write(f"Data length: {len(raw_data) if raw_data else 0}")
+                                        st.write(f"First 100 bytes: {raw_data[:100] if raw_data else 'empty'}")
                                 
                                 # Show text response if any
                                 elif hasattr(part, 'text') and part.text:
@@ -125,7 +124,6 @@ if generate_button:
                 error_msg = str(e)
                 st.error(f"Something went wrong: {error_msg}")
                 
-                # Helpful error messages
                 if "quota" in error_msg.lower() or "limit" in error_msg.lower():
                     st.warning("⚠️ You've hit the free tier limit. Time to switch to Vertex AI with your $300 credit!")
                 elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
