@@ -7,7 +7,6 @@ import os
 
 # 1. Configuration & Secrets
 # ---------------------------
-# Using Gemini API (free tier) - switch to Vertex AI when hitting limits
 google_api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
 # 2. Page Setup
@@ -20,13 +19,13 @@ st.set_page_config(
 
 st.title("🎨 Mel's Image Studio")
 st.write("Welcome! Type what you want to see below and click Generate.")
-st.caption("Powered by Google Gemini • Created by Bee for Mel")
+st.caption("Powered by Google Gemini 2.0 Flash • Created by Bee for Mel")
 
 # 3. Sidebar
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.info("Using Gemini API (free tier). Will switch to Vertex AI with $300 credit if we hit limits.")
+    st.info("Using Gemini 2.0 Flash (experimental). For production, we'll switch to Vertex AI with your $300 credit.")
     st.divider()
     st.markdown("### 💡 Tips")
     st.markdown("""
@@ -59,42 +58,44 @@ if generate_button:
     elif not google_api_key:
         st.error("No API key configured. Add GEMINI_API_KEY to Streamlit secrets.")
     else:
-        with st.spinner("Creating your image... (usually 10-20 seconds)"):
+        with st.spinner("Creating your image... (usually 10-30 seconds)"):
             try:
                 # Configure the client
                 genai.configure(api_key=google_api_key)
                 
-                # Use Imagen 3 for image generation via Gemini API
-                model = genai.GenerativeModel('imagen-3.0-generate-002')
+                # Use Gemini 2.0 Flash for image generation
+                model = genai.GenerativeModel('gemini-2.0-flash-exp')
                 
                 # Generate the image
                 response = model.generate_content(
                     prompt,
                     generation_config={
-                        "response_modalities": ["IMAGE"],
+                        "response_modalities": ["TEXT", "IMAGE"],
                     }
                 )
                 
                 # Process the response
                 if response.candidates and response.candidates[0].content.parts:
-                    image_part = None
+                    images = []
+                    text_response = ""
+                    
                     for part in response.candidates[0].content.parts:
                         if hasattr(part, 'inline_data') and part.inline_data:
-                            image_part = part
-                            break
+                            # This is an image
+                            img_data = base64.b64decode(part.inline_data.data)
+                            img = Image.open(io.BytesIO(img_data))
+                            images.append(img)
+                        elif hasattr(part, 'text') and part.text:
+                            text_response = part.text
                     
-                    if image_part and image_part.inline_data:
-                        # Decode the image
-                        img_data = base64.b64decode(image_part.inline_data.data)
-                        img = Image.open(io.BytesIO(img_data))
-                        
-                        # Display the image
+                    if images:
+                        # Display the first image
                         st.success("Here's your creation!")
-                        st.image(img, caption=prompt, use_container_width=True)
+                        st.image(images[0], caption=prompt, use_container_width=True)
                         
                         # Download button
                         buffered = io.BytesIO()
-                        img.save(buffered, format="PNG")
+                        images[0].save(buffered, format="PNG")
                         st.download_button(
                             label="📥 Download Image",
                             data=buffered.getvalue(),
@@ -107,13 +108,19 @@ if generate_button:
                             st.session_state.gallery = []
                         st.session_state.gallery.append({
                             'prompt': prompt,
-                            'image': img
+                            'image': images[0]
                         })
                         
+                        # Show text response if any
+                        if text_response:
+                            st.info(f"📝 {text_response}")
                     else:
-                        st.error("The model didn't return an image. Try a different prompt.")
+                        st.error("No image was generated. The model returned text only.")
+                        if text_response:
+                            st.write(text_response)
+                        
                 else:
-                    st.error("Could not generate image. Try again.")
+                    st.error("Could not generate image. Try again with a different prompt.")
                     
             except Exception as e:
                 error_msg = str(e)
@@ -124,8 +131,11 @@ if generate_button:
                     st.warning("⚠️ You've hit the free tier limit. Time to switch to Vertex AI with your $300 credit!")
                 elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
                     st.warning("🔑 The API key might be wrong. Check the secrets configuration.")
-                elif "not supported" in error_msg.lower():
-                    st.warning("🔧 This model needs Vertex AI. Let Bee know to update the app.")
+                elif "not found" in error_msg.lower() or "not supported" in error_msg.lower():
+                    st.warning("🔧 Model not available. Bee needs to update the app.")
+                else:
+                    with st.expander("🔍 Technical Details"):
+                        st.code(error_msg)
 
 # 6. Gallery (shows previous generations in this session)
 # ---------------------------
