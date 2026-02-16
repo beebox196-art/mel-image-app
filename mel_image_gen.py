@@ -69,33 +69,33 @@ if generate_button:
                 # Generate the image
                 response = model.generate_content(prompt)
                 
-                # Debug: show what we got
-                st.write("Debug - Response received")
-                
-                # Try to extract the image from response
+                # Extract the image from response
                 image_found = False
                 
                 if hasattr(response, 'candidates') and response.candidates:
                     candidate = response.candidates[0]
-                    st.write(f"Debug - Candidate finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}")
                     
                     if hasattr(candidate, 'content') and candidate.content:
                         if hasattr(candidate.content, 'parts'):
-                            st.write(f"Debug - Number of parts: {len(candidate.content.parts)}")
-                            
-                            for idx, part in enumerate(candidate.content.parts):
-                                st.write(f"Debug - Part {idx}: {type(part).__name__}")
-                                
+                            for part in candidate.content.parts:
                                 # Check for inline_data (image)
                                 if hasattr(part, 'inline_data') and part.inline_data:
-                                    st.write(f"Debug - Found inline_data, mime_type: {part.inline_data.mime_type if hasattr(part.inline_data, 'mime_type') else 'unknown'}")
-                                    
                                     try:
-                                        img_data = base64.b64decode(part.inline_data.data)
+                                        # The data might be base64 string or bytes
+                                        raw_data = part.inline_data.data
+                                        
+                                        # Try to decode as base64 first
+                                        try:
+                                            img_data = base64.b64decode(raw_data)
+                                        except:
+                                            # If that fails, it might already be bytes
+                                            img_data = raw_data
+                                        
+                                        # Try to open the image
                                         img = Image.open(io.BytesIO(img_data))
                                         
                                         st.success("Here's your creation!")
-                                        st.image(img, caption=prompt, use_container_width=True)
+                                        st.image(img, caption=prompt, use_column_width=True)
                                         
                                         # Download button
                                         buffered = io.BytesIO()
@@ -110,15 +110,16 @@ if generate_button:
                                         
                                     except Exception as img_error:
                                         st.error(f"Image decode error: {img_error}")
+                                        # Show what we got for debugging
+                                        st.write(f"Data type: {type(raw_data)}")
+                                        st.write(f"Data length: {len(raw_data) if raw_data else 0}")
                                 
-                                # Check for text response
+                                # Show text response if any
                                 elif hasattr(part, 'text') and part.text:
-                                    st.write(f"Debug - Text response: {part.text[:200]}")
+                                    st.info(f"📝 {part.text}")
                 
                 if not image_found:
                     st.error("No image found in the response.")
-                    st.write("Full response debug:")
-                    st.json(str(response))
                     
             except Exception as e:
                 error_msg = str(e)
@@ -129,6 +130,3 @@ if generate_button:
                     st.warning("⚠️ You've hit the free tier limit. Time to switch to Vertex AI with your $300 credit!")
                 elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
                     st.warning("🔑 The API key might be wrong. Check the secrets configuration.")
-                else:
-                    with st.expander("🔍 Full Technical Details"):
-                        st.code(error_msg)
